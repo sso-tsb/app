@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>QR Codes SSO — TSB/VDN/TN</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#f0f2f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;padding:30px 20px}
+.page{max-width:700px;margin:0 auto}
+.header{background:#1a3a8a;color:#fff;border-radius:14px;padding:20px 24px;margin-bottom:24px;text-align:center}
+.header h1{font-size:22px;font-weight:700;margin-bottom:4px}
+.header p{font-size:13px;opacity:.7}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px}
+.qr-card{background:#fff;border-radius:14px;padding:24px;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,.08)}
+.qr-card h2{font-size:16px;font-weight:700;color:#1a3a8a;margin-bottom:4px}
+.qr-card p{font-size:11px;color:#999;margin-bottom:16px;line-height:1.4}
+.qr-box{display:flex;justify-content:center;margin-bottom:14px}
+.url-box{background:#f0f2f5;border-radius:8px;padding:8px 10px;font-size:10px;color:#555;word-break:break-all;margin-bottom:12px;font-family:monospace}
+.btn-print{width:100%;padding:10px;background:#1a3a8a;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit}
+.btn-dl{width:100%;padding:10px;background:#fff;color:#1a3a8a;border:2px solid #1a3a8a;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;margin-top:6px}
+.note{text-align:center;font-size:11px;color:#aaa;line-height:1.6;background:#fff;border-radius:10px;padding:14px}
+@media print{body{background:#fff;padding:10px}.btn-print,.btn-dl{display:none}.header{border-radius:0}}
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="header">
+    <h1>Códigos QR — Sistema SSO</h1>
+    <p>TSB &nbsp;·&nbsp; VDN &nbsp;·&nbsp; TN &nbsp;&nbsp;|&nbsp;&nbsp; FY SYSO 061 01 · Rev 00 · 19/01/2026</p>
+  </div>
+  <div class="grid">
+    <div class="qr-card">
+      <h2>📋 Tarjeta de Observación</h2>
+      <p>Para operarios y personal de campo</p>
+      <div class="qr-box"><div id="qr-obs"></div></div>
+      <div class="url-box">https://sso-tsb.github.io/app/observador_sso.html</div>
+      <button class="btn-dl" onclick="dlQR('qr-obs','qr_observador')">⬇ Descargar QR</button>
+    </div>
+    <div class="qr-card">
+      <h2>📊 Panel Líder SSO</h2>
+      <p>Solo para supervisores autorizados</p>
+      <div class="qr-box"><div id="qr-lid"></div></div>
+      <div class="url-box">https://sso-tsb.github.io/app/lider_sso.html</div>
+      <button class="btn-dl" onclick="dlQR('qr-lid','qr_lider')">⬇ Descargar QR</button>
+    </div>
+  </div>
+  <button class="btn-print" onclick="window.print()">🖨️ Imprimir ambos QR</button>
+  <div class="note" style="margin-top:16px">
+    Estos QR son <strong>permanentes</strong>. Podés imprimirlos y pegarlos donde necesites.<br>
+    Apuntan siempre a la versión más actualizada del sistema.
+  </div>
+</div>
+<script>
+new QRCode(document.getElementById('qr-obs'), {
+  text: 'https://sso-tsb.github.io/app/observador_sso.html',
+  width: 200, height: 200,
+  colorDark: '#1a3a8a', colorLight: '#ffffff',
+  correctLevel: QRCode.CorrectLevel.H
+});
+new QRCode(document.getElementById('qr-lid'), {
+  text: 'https://sso-tsb.github.io/app/lider_sso.html',
+  width: 200, height: 200,
+  colorDark: '#1a3a8a', colorLight: '#ffffff',
+  correctLevel: QRCode.CorrectLevel.H
+});
+function dlQR(id, fname) {
+  var canvas = document.getElementById(id).querySelector('canvas');
+  if (!canvas) { alert('Esperá un momento y volvé a intentar'); return; }
+  var a = document.createElement('a');
+  a.href = canvas.toDataURL('image/png');
+  a.download = fname + '.png';
+  a.click();
+}
+</script>
+</body>
+</html>
