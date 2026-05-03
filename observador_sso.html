@@ -211,7 +211,7 @@ textarea{min-height:80px;resize:vertical}
 var _ad = JSON.parse(document.getElementById('app-data').textContent);
 var LOGO = _ad.logo;
 var IMGS = _ad.imgs;
-var SURL = "https://script.google.com/macros/s/AKfycbxzlx3MyHs6B6rZBJu9OT4Vy8w189o8P-suKvC6JN5Jrdxl7lUbVpNkdCYvMR_SLEc/exec";
+var SURL = "https://script.google.com/macros/s/AKfycbwXH5R3tFAzwrmRV0CsRGKiuZlHurDhuHnTLIj19D5Q1k2sUwwTqwjnSSl6oFepBVM9/exec";
 var _ci = 0;
 
 document.getElementById('ll').src = LOGO;
@@ -289,35 +289,15 @@ document.getElementById('tb-cond').onclick = function(){ selT('cond'); };
 document.getElementById('tb-pos').onclick = function(){ selT('pos'); };
 document.getElementById('tb-cuasi').onclick = function(){ selT('cuasi'); };
 
-// Dual API: fetch no-cors for sending, JSONP for reading
-function buildUrl(params) {
-  var url = SURL+'?';
-  var parts = [];
-  for (var k in params) parts.push(encodeURIComponent(k)+'='+encodeURIComponent(params[k]));
-  return url + parts.join('&');
-}
-
-function apiSend(params, cb) {
-  // Use fetch no-cors for sending - works on ALL browsers including iOS Safari
-  // Fire and forget - we can't read the response but data arrives at server
-  var url = buildUrl(params);
-  if (typeof fetch !== 'undefined') {
-    fetch(url, {method:'GET', mode:'no-cors'})
-      .then(function(){ cb(null, {ok:true}); })
-      .catch(function(e){ cb(e, null); });
-  } else {
-    // Fallback for very old browsers
-    apiJsonp(params, cb);
-  }
-}
-
-function apiJsonp(params, cb) {
+// JSONP API - works on all browsers on https://
+function api(params, cb) {
   var nm = '_cb'+(++_ci);
-  var url = buildUrl(params) + '&callback='+nm;
+  var url = SURL+'?callback='+nm;
+  for (var k in params) url += '&'+encodeURIComponent(k)+'='+encodeURIComponent(params[k]);
   var sc = document.createElement('script'), done=false;
   var tm = setTimeout(function(){
     if(!done){ done=true; del(nm,sc); cb(new Error('timeout'),null); }
-  }, 10000);
+  }, 12000);
   window[nm] = function(data){
     if(!done){ done=true; clearTimeout(tm); del(nm,sc); cb(null,data); }
   };
@@ -327,16 +307,6 @@ function apiJsonp(params, cb) {
   sc.src = url;
   document.head.appendChild(sc);
 }
-
-function api(params, cb) {
-  // Route: guardar uses no-cors fetch, listar uses JSONP
-  if (params.action === 'guardar') {
-    apiSend(params, cb);
-  } else {
-    apiJsonp(params, cb);
-  }
-}
-
 function del(n,el){ delete window[n]; if(el&&el.parentNode) el.parentNode.removeChild(el); }
 
 function updSt() {
