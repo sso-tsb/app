@@ -202,6 +202,7 @@ function mapT(t){ if(!t)return 'acto'; if(t.indexOf('Acto')>=0)return 'acto'; if
 function updTabs(){
   var pend=todas.filter(function(t){return t['Estado']==='Abierta'||t['Estado']==='Vencida'||t['Estado']==='En tratamiento';});
   document.getElementById('t0').innerHTML='Pendientes'+(pend.length?'<span class="cnt">'+pend.length+'</span>':'');
+  document.getElementById('t1').innerHTML='Todas'+(todas.length?' ('+todas.length+')':'');
 }
 
 function rPend(){
@@ -258,7 +259,7 @@ function mkCard(t,conAcc){
   h+='<div class="ti-head"><span class="bdg b-num">#'+('000'+num).slice(-4)+'</span><span class="bdg '+TIPOB[tipo]+'">'+TIPOS[tipo]+'</span><span class="ebdg eb'+ec.slice(1)+'">'+(est==='En tratamiento'?'En trat.':est)+'</span></div>';
   h+='<div class="ti-meta"><b>'+(t['Observador']||'')+'</b> &middot; '+(t['Unidad Operativa']||'')+' &middot; '+(t['Cliente']||'')+'</div>';
   h+='<div class="ti-obs">'+obs+'</div>';
-  h+='<div class="ti-meta">'+(t['\u00c1rea']||t['Area']||'')+(t['Servicio']?' &middot; '+t['Servicio']:'')+'</div>';
+  h+='<div class="ti-meta">'+(t['\u00c1rea/Yacimiento']||t['\u00c1rea']||t['Area']||'')+(t['Servicio']?' &middot; '+t['Servicio']:'')+'</div>';
   h+='<span class="ti-dias '+dc+'">&#128197; '+dTxt+' desde la observaci\u00f3n</span>';
   if(com) h+='<div class="com-prev"><b>Comentario:</b> '+com+'</div>';
   if(conAcc){
