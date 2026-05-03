@@ -289,11 +289,40 @@ document.getElementById('tb-cond').onclick = function(){ selT('cond'); };
 document.getElementById('tb-pos').onclick = function(){ selT('pos'); };
 document.getElementById('tb-cuasi').onclick = function(){ selT('cuasi'); };
 
-// JSONP API - works on all browsers on https://
-function api(params, cb) {
+// Hybrid API:
+// - guardar/sync: Image beacon (bypasses ALL CORS/ITP on iOS Safari)
+// - listar: JSONP (needs response to read data)
+
+function buildUrl(params) {
+  var url = SURL + '?';
+  var parts = [];
+  for (var k in params) parts.push(encodeURIComponent(k)+'='+encodeURIComponent(params[k]));
+  return url + parts.join('&');
+}
+
+// Image beacon - works on ALL browsers including iOS Safari ITP
+// Fire and forget: saves data without needing to read response
+function apiBeacon(params, cb) {
+  var url = buildUrl(params);
+  var img = new Image();
+  var done = false;
+  var tm = setTimeout(function(){
+    if (!done) { done=true; cb(null, {ok:true}); } // assume ok after timeout
+  }, 5000);
+  img.onload = function(){
+    if (!done) { done=true; clearTimeout(tm); cb(null, {ok:true}); }
+  };
+  img.onerror = function(){
+    // onerror fires even on redirect - still means request was made
+    if (!done) { done=true; clearTimeout(tm); cb(null, {ok:true}); }
+  };
+  img.src = url;
+}
+
+// JSONP - for reads that need response
+function apiJsonp(params, cb) {
   var nm = '_cb'+(++_ci);
-  var url = SURL+'?callback='+nm;
-  for (var k in params) url += '&'+encodeURIComponent(k)+'='+encodeURIComponent(params[k]);
+  var url = buildUrl(params) + '&callback='+nm;
   var sc = document.createElement('script'), done=false;
   var tm = setTimeout(function(){
     if(!done){ done=true; del(nm,sc); cb(new Error('timeout'),null); }
@@ -306,6 +335,14 @@ function api(params, cb) {
   };
   sc.src = url;
   document.head.appendChild(sc);
+}
+
+function api(params, cb) {
+  if (params.action === 'guardar') {
+    apiBeacon(params, cb);
+  } else {
+    apiJsonp(params, cb);
+  }
 }
 function del(n,el){ delete window[n]; if(el&&el.parentNode) el.parentNode.removeChild(el); }
 
@@ -327,7 +364,7 @@ function syncPend() {
   _syncing = true;
   updSt();
   var item = pend[0];
-  api(item, function(err,res){
+  apiBeacon(item, function(err,res){
     _syncing = false;
     if (!err && res && res.ok) {
       pend.shift();
