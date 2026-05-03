@@ -120,10 +120,12 @@ html,body{min-height:100%;background:#f0f2f5;font-family:-apple-system,BlinkMacS
     <button class="tab act" id="t0">Pendientes</button>
     <button class="tab" id="t1">Todas</button>
     <button class="tab" id="t2">Indicadores</button>
+    <button class="tab" id="t3">&#9881; Config</button>
   </div>
   <div class="sec act" id="s0"><div id="c0"></div></div>
   <div class="sec" id="s1"><div id="c1"></div></div>
   <div class="sec" id="s2"><div id="c2"></div></div>
+  <div class="sec" id="s3"><div id="c3"></div></div>
 </div>
 
 <div class="toast" id="toast"></div>
@@ -161,6 +163,7 @@ document.getElementById('inp-p').onkeydown = function(e){ if(e.key==='Enter') do
 document.getElementById('t0').onclick = function(){ gTab(0); };
 document.getElementById('t1').onclick = function(){ gTab(1); };
 document.getElementById('t2').onclick = function(){ gTab(2); };
+document.getElementById('t3').onclick = function(){ gTab(3); };
 
 function api(params, cb) {
   var nm = '_cb'+(++_ci);
@@ -298,11 +301,12 @@ function chEst(id,estado){
 }
 
 function gTab(n){
-  [0,1,2].forEach(function(i){
+  [0,1,2,3].forEach(function(i){
     document.getElementById('t'+i).classList.toggle('act',i===n);
     document.getElementById('s'+i).classList.toggle('act',i===n);
   });
-  if(n===2)rInd();
+  if(n===2) rInd();
+  if(n===3) rConfig();
   window.scrollTo(0,0);
 }
 
@@ -345,6 +349,97 @@ function expCSV(){
   document.body.appendChild(a);a.click();document.body.removeChild(a);
   showToast('CSV exportado');
 }
+
+function rConfig(){
+  var c=document.getElementById('c3');
+  // Load from localStorage (allows runtime changes)
+  var listaActual = [];
+  try { var saved=localStorage.getItem('sso_lideres'); if(saved) listaActual=JSON.parse(saved); } catch(e) {}
+  if(!listaActual.length) listaActual = LISTA.slice();
+
+  var h='<div style="padding:4px 0 12px"><div style="font-size:13px;color:#555;line-height:1.6;margin-bottom:16px">';
+  h+='Administra los lideres autorizados y el correo de notificaciones.<br>';
+  h+='Los cambios se guardan en este dispositivo.</div>';
+
+  // Lideres list
+  h+='<div class="card"><div class="ct">Lideres autorizados</div>';
+  h+='<div id="lideres-list">'+listaActual.map(function(n,i){
+    return '<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:#f7f8fa;border-radius:8px;margin-bottom:6px;border:1px solid #e8edf5">';
+    +'<span style="flex:1;font-size:13px">'+n+'</span>';
+    +'<button data-i="'+i+'" style="background:transparent;border:none;cursor:pointer;color:#bbb;font-size:16px;padding:0 4px" class="btn-del-lider">x</button>';
+    +'</div>';
+  }).join('')+'</div>';
+
+  // Better: build list as string
+  var listHtml = listaActual.map(function(n,i){
+    return '<div style="display:flex;align-items:center;gap:8px;padding:9px 12px;background:#f7f8fa;border-radius:9px;margin-bottom:6px;border:1.5px solid #e8edf5">'
+      +'<span style="flex:1;font-size:13px;font-weight:500">'+n+'</span>'
+      +'<button data-idx="'+i+'" class="btn-del-lider" style="background:transparent;border:none;cursor:pointer;color:#aaa;font-size:18px;line-height:1;padding:0 3px">&#10005;</button>'
+      +'</div>';
+  }).join('');
+
+  h = '<div style="padding:4px 0 12px">';
+  h += '<div class="card"><div class="ct">Lideres autorizados</div>';
+  h += '<div id="lideres-list">'+listHtml+'</div>';
+  h += '<div style="display:flex;gap:8px;margin-top:10px">';
+  h += '<input type="text" id="inp-new-lider" placeholder="Nombre completo..." style="flex:1;padding:10px 12px;border:1.5px solid #e8edf5;border-radius:9px;font-size:13px;font-family:inherit;outline:none;background:#f7f8fa;-webkit-appearance:none">';
+  h += '<button id="btn-add-lider" style="padding:10px 16px;background:#1a3a8a;color:#fff;border:none;border-radius:9px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap;-webkit-appearance:none">+ Agregar</button>';
+  h += '</div>';
+  h += '<div style="font-size:11px;color:#aaa;margin-top:6px">El nombre debe coincidir exactamente con lo que escribe el lider al ingresar.</div>';
+  h += '</div>';
+
+  // PIN change
+  h += '<div class="card"><div class="ct">PIN de acceso</div>';
+  h += '<div style="display:flex;gap:8px">';
+  h += '<input type="password" id="inp-new-pin" placeholder="Nuevo PIN..." maxlength="8" style="flex:1;padding:10px 12px;border:1.5px solid #e8edf5;border-radius:9px;font-size:14px;font-family:inherit;letter-spacing:3px;text-align:center;outline:none;background:#f7f8fa;-webkit-appearance:none">';
+  h += '<button id="btn-save-pin" style="padding:10px 16px;background:#1a3a8a;color:#fff;border:none;border-radius:9px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap;-webkit-appearance:none">Guardar PIN</button>';
+  h += '</div>';
+  h += '<div style="font-size:11px;color:#aaa;margin-top:6px">PIN actual guardado en este dispositivo. Compartilo con otros lideres de forma segura.</div>';
+  h += '</div></div>';
+
+  c.innerHTML = h;
+
+  // Wire buttons
+  c.querySelectorAll('.btn-del-lider').forEach(function(b){
+    b.onclick = function(){
+      var idx=parseInt(this.getAttribute('data-idx'));
+      listaActual.splice(idx,1);
+      try{localStorage.setItem('sso_lideres',JSON.stringify(listaActual));}catch(e){}
+      LISTA = listaActual.slice();
+      showToast('Lider eliminado');
+      rConfig();
+    };
+  });
+
+  var btnAdd = document.getElementById('btn-add-lider');
+  if(btnAdd) btnAdd.onclick = function(){
+    var val = document.getElementById('inp-new-lider').value.trim();
+    if(!val){showToast('Escribe un nombre');return;}
+    if(listaActual.indexOf(val)>=0){showToast('Ya esta en la lista');return;}
+    listaActual.push(val);
+    try{localStorage.setItem('sso_lideres',JSON.stringify(listaActual));}catch(e){}
+    LISTA = listaActual.slice();
+    document.getElementById('inp-new-lider').value='';
+    showToast('Lider agregado: '+val);
+    rConfig();
+  };
+
+  var btnPin = document.getElementById('btn-save-pin');
+  if(btnPin) btnPin.onclick = function(){
+    var np = document.getElementById('inp-new-pin').value.trim();
+    if(!np || np.length<4){showToast('El PIN debe tener al menos 4 caracteres');return;}
+    PIN = np;
+    try{localStorage.setItem('sso_pin',np);}catch(e){}
+    document.getElementById('inp-new-pin').value='';
+    showToast('PIN actualizado');
+  };
+}
+
+// Load saved lideres and PIN on startup
+(function(){
+  try{var s=localStorage.getItem('sso_lideres');if(s){var a=JSON.parse(s);if(a&&a.length)LISTA=a;}}catch(e){}
+  try{var p=localStorage.getItem('sso_pin');if(p)PIN=p;}catch(e){}
+})();
 
 function showToast(msg){var t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');clearTimeout(t._t);t._t=setTimeout(function(){t.classList.remove('show');},2800);}
 </script>
