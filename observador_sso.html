@@ -141,7 +141,7 @@ textarea{min-height:80px;resize:vertical}
     <div class="card">
       <div class="ct">Tipo de hallazgo</div>
       <div class="tgrid">
-        <button class="tbtn" id="tb-acto" style="background:#fffde7;border-color:#f9a825;color:#e65100">&#9888; Acto inseguro</button>
+        <button class="tbtn" id="tb-acto"><span style="display:inline-block;background:#f9a825;color:#fff;border-radius:50%;width:22px;height:22px;line-height:22px;font-size:12px;margin-right:4px;text-align:center">!</span>Acto inseguro</button>
         <button class="tbtn" id="tb-cond">&#128295; Condici&#243;n insegura</button>
         <button class="tbtn" id="tb-pos">&#9989; Reconocimiento positivo</button>
         <button class="tbtn" id="tb-cuasi">&#128680; Cuasi accidente</button>
@@ -289,24 +289,54 @@ document.getElementById('tb-cond').onclick = function(){ selT('cond'); };
 document.getElementById('tb-pos').onclick = function(){ selT('pos'); };
 document.getElementById('tb-cuasi').onclick = function(){ selT('cuasi'); };
 
-// JSONP API
-function api(params, cb) {
+// Dual API: fetch no-cors for sending, JSONP for reading
+function buildUrl(params) {
+  var url = SURL+'?';
+  var parts = [];
+  for (var k in params) parts.push(encodeURIComponent(k)+'='+encodeURIComponent(params[k]));
+  return url + parts.join('&');
+}
+
+function apiSend(params, cb) {
+  // Use fetch no-cors for sending - works on ALL browsers including iOS Safari
+  // Fire and forget - we can't read the response but data arrives at server
+  var url = buildUrl(params);
+  if (typeof fetch !== 'undefined') {
+    fetch(url, {method:'GET', mode:'no-cors'})
+      .then(function(){ cb(null, {ok:true}); })
+      .catch(function(e){ cb(e, null); });
+  } else {
+    // Fallback for very old browsers
+    apiJsonp(params, cb);
+  }
+}
+
+function apiJsonp(params, cb) {
   var nm = '_cb'+(++_ci);
-  var url = SURL+'?callback='+nm;
-  for (var k in params) url += '&'+encodeURIComponent(k)+'='+encodeURIComponent(params[k]);
+  var url = buildUrl(params) + '&callback='+nm;
   var sc = document.createElement('script'), done=false;
   var tm = setTimeout(function(){
-    if (!done) { done=true; del(nm,sc); cb(new Error('timeout'),null); }
-  }, 8000);
+    if(!done){ done=true; del(nm,sc); cb(new Error('timeout'),null); }
+  }, 10000);
   window[nm] = function(data){
-    if (!done) { done=true; clearTimeout(tm); del(nm,sc); cb(null,data); }
+    if(!done){ done=true; clearTimeout(tm); del(nm,sc); cb(null,data); }
   };
   sc.onerror = function(){
-    if (!done) { done=true; clearTimeout(tm); del(nm,sc); cb(new Error('err'),null); }
+    if(!done){ done=true; clearTimeout(tm); del(nm,sc); cb(new Error('err'),null); }
   };
   sc.src = url;
   document.head.appendChild(sc);
 }
+
+function api(params, cb) {
+  // Route: guardar uses no-cors fetch, listar uses JSONP
+  if (params.action === 'guardar') {
+    apiSend(params, cb);
+  } else {
+    apiJsonp(params, cb);
+  }
+}
+
 function del(n,el){ delete window[n]; if(el&&el.parentNode) el.parentNode.removeChild(el); }
 
 function updSt() {
