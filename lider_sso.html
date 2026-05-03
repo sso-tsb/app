@@ -120,7 +120,7 @@ html,body{min-height:100%;background:#f0f2f5;font-family:-apple-system,BlinkMacS
     <button class="tab act" id="t0">Pendientes</button>
     <button class="tab" id="t1">Todas</button>
     <button class="tab" id="t2">Indicadores</button>
-    <button class="tab" id="t3">&#9881; Config</button>
+    <button class="tab" id="t3" style="display:none">&#9881; Config</button>
   </div>
   <div class="sec act" id="s0"><div id="c0"></div></div>
   <div class="sec" id="s1"><div id="c1"></div></div>
@@ -155,6 +155,9 @@ function doLogin() {
   document.getElementById('login-screen').style.display = 'none';
   document.getElementById('app').style.display = 'block';
   document.getElementById('lbadge').textContent = n.split(' ')[0].toUpperCase();
+  // Config tab solo para Sergio Villalobos (administrador)
+  var t3 = document.getElementById('t3');
+  if(t3) t3.style.display = (n.toLowerCase()==='sergio villalobos') ? '' : 'none';
   cargar();
 }
 
