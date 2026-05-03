@@ -129,6 +129,10 @@ textarea{min-height:80px;resize:vertical}
       <div class="hnum" id="ndisp">#----</div>
     </div>
   </div>
+  <div id="retry-bar" style="background:#f57c00;color:#fff;padding:8px 14px;display:none;align-items:center;justify-content:space-between;font-size:12px;font-weight:600;gap:8px">
+    <span>Hay tarjetas pendientes de envio</span>
+    <button id="retry-btn" onclick="syncPend()" style="background:#fff;color:#f57c00;border:none;border-radius:6px;padding:5px 12px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;-webkit-appearance:none">Enviar ahora</button>
+  </div>
   <div class="tabs">
     <button class="tab act" id="tab-n">+ Nueva</button>
     <button class="tab" id="tab-h">Mis tarjetas</button>
@@ -290,7 +294,7 @@ function api(params, cb) {
   var sc = document.createElement('script'), done=false;
   var tm = setTimeout(function(){
     if (!done) { done=true; del(nm,sc); cb(new Error('timeout'),null); }
-  }, 20000);
+  }, 8000);
   window[nm] = function(data){
     if (!done) { done=true; clearTimeout(tm); del(nm,sc); cb(null,data); }
   };
@@ -304,31 +308,50 @@ function del(n,el){ delete window[n]; if(el&&el.parentNode) el.parentNode.remove
 
 function updSt() {
   var p=pend.length, online=navigator.onLine;
+  // Dot: orange+blink if pending, red if offline, green if connected
   document.getElementById('dot').className = 'dot'+(p>0?' sync':online?'':' off');
   document.getElementById('clbl').textContent = p>0 ? p+' pend. sync' : (online?'Conectado':'Sin conexion');
   document.getElementById('ndisp').textContent = '#'+String(nextNum).padStart(4,'0');
+  // Retry bar
+  var rb = document.getElementById('retry-bar');
+  if(rb) rb.style.display = p>0 ? 'flex' : 'none';
 }
 
+var _syncing = false;
 function syncPend() {
-  if (pend.length===0) { updSt(); return; }
-  if (!navigator.onLine) { updSt(); return; }
+  if (pend.length===0) { updSt(); hideRetryBtn(); return; }
+  if (_syncing) return;
+  _syncing = true;
+  updSt();
   var item = pend[0];
   api(item, function(err,res){
+    _syncing = false;
     if (!err && res && res.ok) {
       pend.shift();
       try { localStorage.setItem('sso_pend',JSON.stringify(pend)); } catch(e) {}
       updSt();
-      if (pend.length>0) setTimeout(syncPend, 1000);
-      else showToast('Todo sincronizado con el servidor');
+      if (pend.length>0) setTimeout(syncPend, 800);
+      else { showToast('Todo sincronizado'); hideRetryBtn(); }
     } else {
       updSt();
+      showRetryBtn();
     }
   });
 }
 
-window.addEventListener('online', function(){ setTimeout(function(){ updSt(); syncPend(); },1500); });
+function showRetryBtn(){
+  var b=document.getElementById('retry-btn');
+  if(b) b.style.display='block';
+}
+function hideRetryBtn(){
+  var b=document.getElementById('retry-btn');
+  if(b) b.style.display='none';
+}
+
+window.addEventListener('online', function(){ setTimeout(function(){ updSt(); if(pend.length>0) syncPend(); },1000); });
 window.addEventListener('offline', function(){ updSt(); });
-setInterval(function(){ if(navigator.onLine && pend.length>0) syncPend(); }, 30000);
+// Try sync every 20 seconds
+setInterval(function(){ if(pend.length>0 && !_syncing) syncPend(); }, 20000);
 
 function pSel(id,arr){
   var s=document.getElementById(id); if(!s) return;
@@ -445,25 +468,21 @@ function guardar(){
   btn.textContent='Enviando...'; btn.disabled=true;
   // Save to local history immediately
   saveHist(num, p.fecha, form.tipo, obs, uo);
-  if (!navigator.onLine) {
-    // Offline: save to pending and show message
-    pend.push(p);
-    try { localStorage.setItem('sso_pend',JSON.stringify(pend)); } catch(e) {}
-    btn.textContent='Guardar observacion'; btn.disabled=false;
-    showToast('Tarjeta #'+num+' guardada - se enviara al conectarse');
-    resetF(); updSt();
-    return;
-  }
+  // Always try to send - don't rely on navigator.onLine (unreliable on mobile)
   api(p, function(err,res){
     btn.textContent='Guardar observacion'; btn.disabled=false;
     if(!err && res && res.ok){
       showToast('Tarjeta #'+num+' enviada al servidor');
+      resetF(); updSt();
     } else {
+      // Failed (offline or server error) - save to pending queue
       pend.push(p);
       try { localStorage.setItem('sso_pend',JSON.stringify(pend)); } catch(e) {}
-      showToast('Tarjeta #'+num+' guardada - sync pendiente');
+      showToast('Tarjeta #'+num+' guardada - pendiente de sync');
+      resetF(); updSt();
+      // Show retry button
+      showRetryBtn();
     }
-    resetF(); updSt();
   });
 }
 
