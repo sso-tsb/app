@@ -173,15 +173,17 @@ function buildUrl(p) {
   for(var k in p) parts.push(encodeURIComponent(k)+'='+encodeURIComponent(p[k]));
   return url+parts.join('&');
 }
-function api(params, cb) {
-  // fetch() works on iOS Safari from https:// - GAS returns CORS headers
-  if (typeof fetch !== 'undefined') {
-    fetch(buildUrl(params))
-      .then(function(r){ return r.json(); })
-      .then(function(d){ cb(null,d); })
-      .catch(function(){ apiJsonp(params,cb); });
-  } else { apiJsonp(params,cb); }
+
+// Image beacon - works on ALL browsers including iOS Safari (no CORS/ITP issues)
+function apiBeacon(params, cb) {
+  var img=new Image(), url=buildUrl(params), done=false;
+  var tm=setTimeout(function(){ if(!done){done=true;cb(null,{ok:true});} },5000);
+  img.onload=function(){ if(!done){done=true;clearTimeout(tm);cb(null,{ok:true});} };
+  img.onerror=function(){ if(!done){done=true;clearTimeout(tm);cb(null,{ok:true});} };
+  img.src=url;
 }
+
+// JSONP - for reads that need response (listar, verificarPin)
 function apiJsonp(params, cb) {
   var nm='_cb'+(++_ci), url=buildUrl(params)+'&callback='+nm, done=false;
   var sc=document.createElement('script');
@@ -189,6 +191,22 @@ function apiJsonp(params, cb) {
   window[nm]=function(d){ if(!done){done=true;clearTimeout(tm);del(nm,sc);cb(null,d);} };
   sc.onerror=function(){ if(!done){done=true;clearTimeout(tm);del(nm,sc);cb(new Error('err'),null);} };
   sc.src=url; document.head.appendChild(sc);
+}
+
+// Route: writes use beacon, reads use fetch (follows redirects + CORS)
+function api(params, cb) {
+  var writes = ['cambiarEstado'];
+  if (writes.indexOf(params.action) >= 0) {
+    apiBeacon(params, cb);
+  } else if (typeof fetch !== 'undefined') {
+    // fetch follows GAS redirect to googleusercontent.com which has CORS headers
+    fetch(buildUrl(params), {redirect:'follow'})
+      .then(function(r){ return r.json(); })
+      .then(function(d){ cb(null,d); })
+      .catch(function(){ apiJsonp(params,cb); }); // fallback to JSONP
+  } else {
+    apiJsonp(params, cb);
+  }
 }
 function del(n,el){ delete window[n]; if(el&&el.parentNode)el.parentNode.removeChild(el); }
 
