@@ -193,17 +193,12 @@ function apiJsonp(params, cb) {
   sc.src=url; document.head.appendChild(sc);
 }
 
-// Route: writes use beacon, reads use fetch (follows redirects + CORS)
+// Route: writes use beacon, reads use JSONP
+// JSONP confirmed working (browser test returns data correctly)
 function api(params, cb) {
   var writes = ['cambiarEstado'];
   if (writes.indexOf(params.action) >= 0) {
     apiBeacon(params, cb);
-  } else if (typeof fetch !== 'undefined') {
-    // fetch follows GAS redirect to googleusercontent.com which has CORS headers
-    fetch(buildUrl(params), {redirect:'follow'})
-      .then(function(r){ return r.json(); })
-      .then(function(d){ cb(null,d); })
-      .catch(function(){ apiJsonp(params,cb); }); // fallback to JSONP
   } else {
     apiJsonp(params, cb);
   }
@@ -215,7 +210,8 @@ function cargar() {
   document.getElementById('c1').innerHTML = '<div class="loading">Cargando...</div>';
   api({action:'listar',rol:'lider'}, function(err,res){
     if(err||!res||!res.ok){
-      var e = '<div class="empty"><div class="eico">&#9888;</div><p>Error al conectar con el servidor.<br>Verific\u00e1 tu conexi\u00f3n a internet.</p></div>';
+      var msg = err ? err.message : (res ? JSON.stringify(res) : 'sin respuesta');
+      var e = '<div class="empty"><div class="eico">&#9888;</div><p>Error al conectar.<br><small style="color:#aaa">'+msg+'</small></p><button onclick="cargar()" style="margin-top:12px;padding:8px 16px;background:#1a3a8a;color:#fff;border:none;border-radius:8px;font-size:12px;font-family:inherit;cursor:pointer">Reintentar</button></div>';
       document.getElementById('c0').innerHTML = e;
       document.getElementById('c1').innerHTML = e;
       return;
