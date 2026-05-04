@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"><title>SSO</title></head>
+<body>
+<p style="font-family:sans-serif;color:#1a3a8a;text-align:center;margin-top:60px;font-size:16px;font-weight:700">Enviando...</p>
+<script>
+var SURL = 'https://script.google.com/macros/s/AKfycbyywLxrXrIHXN1BNRgz602UiWNKmcs8cTE314B_xGUKFGo2E3wMDifwCgK64Wzdat_R/exec';
+var params = {};
+window.location.search.substring(1).split('&').forEach(function(p){
+  var i = p.indexOf('=');
+  if(i>0) params[decodeURIComponent(p.substring(0,i))] = decodeURIComponent(p.substring(i+1).replace(/\+/g,' '));
+});
+var origin = params._origin || '*';
+delete params._origin;
+
+function sendBack(data) {
+  try { if(window.opener) window.opener.postMessage(data, '*'); } catch(e){}
+  document.querySelector('p').textContent = data.ok ? 'Enviado!' : 'Error';
+  setTimeout(function(){ window.close(); }, 1500);
+}
+
+// Build JSONP URL
+var cbName = '_cb' + Date.now();
+var url = SURL + '?callback=' + cbName;
+Object.keys(params).forEach(function(k){
+  url += '&' + encodeURIComponent(k) + '=' + encodeURIComponent(params[k]);
+});
+
+window[cbName] = function(data) {
+  clearTimeout(fallback);
+  sendBack(data);
+};
+
+var sc = document.createElement('script');
+sc.onerror = function(){ clearTimeout(fallback); sendBack({ok:false,msg:'script error'}); };
+sc.src = url;
+document.head.appendChild(sc);
+
+// Wait longer before assuming success
+var fallback = setTimeout(function(){
+  sendBack({ok:true, assumed:true});
+}, 15000);
+</script>
+</body>
+</html>
