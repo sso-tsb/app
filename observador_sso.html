@@ -346,11 +346,9 @@ function apiJsonp(params, cb) {
 }
 
 function api(params, cb) {
-  if (params.action === 'guardar') {
-    apiBeacon(params, cb);
-  } else {
-    apiJsonp(params, cb);
-  }
+  // Use JSONP for all operations - confirmed working on https://sso-tsb.github.io
+  // JSONP gets server confirmation before clearing from pending queue
+  apiJsonp(params, cb);
 }
 function del(n,el){ delete window[n]; if(el&&el.parentNode) el.parentNode.removeChild(el); }
 
@@ -372,7 +370,7 @@ function syncPend() {
   _syncing = true;
   updSt();
   var item = pend[0];
-  apiBeacon(item, function(err,res){
+  api(item, function(err,res){
     _syncing = false;
     if (!err && res && res.ok) {
       pend.shift();
