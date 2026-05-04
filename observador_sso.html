@@ -345,35 +345,49 @@ function apiJsonp(params, cb) {
   document.head.appendChild(sc);
 }
 
-// Form submit via hidden iframe - works on ALL browsers, never blocked by iOS ITP
-function apiForm(params, cb) {
-  try {
-    var ifr = document.createElement('iframe');
-    ifr.name = '_sso_' + Date.now();
-    ifr.style.display = 'none';
-    document.body.appendChild(ifr);
-    var frm = document.createElement('form');
-    frm.method = 'GET';
-    frm.action = SURL;
-    frm.target = ifr.name;
-    frm.style.display = 'none';
-    for (var k in params) {
-      var inp = document.createElement('input');
-      inp.type = 'hidden'; inp.name = k; inp.value = params[k];
-      frm.appendChild(inp);
-    }
-    document.body.appendChild(frm);
-    frm.submit();
-    setTimeout(function(){
-      try{ document.body.removeChild(frm); document.body.removeChild(ifr); }catch(e){}
-      cb(null, {ok:true});
-    }, 3000);
-  } catch(e) { cb(e, null); }
+// Send via fetch no-cors (works on ALL browsers/webviews including WKWebView)
+// Does NOT read response - used for fire-and-forget sends
+function apiNoCors(params, cb) {
+  var url = buildUrl(params);
+  if (typeof fetch !== 'undefined') {
+    fetch(url, {method:'GET', mode:'no-cors', cache:'no-cache'})
+      .then(function(){ cb(null, {ok:true, sent:true}); })
+      .catch(function(){ cb(new Error('fetch-failed'), null); });
+  } else {
+    // Fallback: XHR
+    try {
+      var xhr = new XMLHttpRequest();
+      xhr.open('GET', url, true);
+      xhr.onreadystatechange = function(){
+        if(xhr.readyState===4) cb(null, {ok:true, sent:true});
+      };
+      xhr.onerror = function(){ cb(new Error('xhr-failed'), null); };
+      xhr.send();
+    } catch(e){ cb(e, null); }
+  }
+}
+
+// JSONP - for reads (listar) when we need the response
+function apiJsonp(params, cb) {
+  var nm = '_cb'+(++_ci);
+  var url = buildUrl(params) + '&callback='+nm;
+  var sc = document.createElement('script'), done=false;
+  var tm = setTimeout(function(){
+    if(!done){ done=true; del(nm,sc); cb(new Error('timeout'),null); }
+  }, 12000);
+  window[nm] = function(data){
+    if(!done){ done=true; clearTimeout(tm); del(nm,sc); cb(null,data); }
+  };
+  sc.onerror = function(){
+    if(!done){ done=true; clearTimeout(tm); del(nm,sc); cb(new Error('err'),null); }
+  };
+  sc.src = url;
+  document.head.appendChild(sc);
 }
 
 function api(params, cb) {
   if (params.action === 'guardar') {
-    apiForm(params, cb);
+    apiNoCors(params, cb);
   } else {
     apiJsonp(params, cb);
   }
@@ -397,19 +411,42 @@ function syncPend() {
   if (_syncing) return;
   _syncing = true;
   updSt();
-  var item = pend[0];
-  api(item, function(err,res){
-    _syncing = false;
-    if (!err && res && res.ok) {
-      pend.shift();
-      try { localStorage.setItem('sso_pend',JSON.stringify(pend)); } catch(e) {}
-      updSt();
-      if (pend.length>0) setTimeout(syncPend, 800);
-      else { showToast('Todo sincronizado'); hideRetryBtn(); }
-    } else {
-      updSt();
-      showRetryBtn();
+  // Send all pending with no-cors, then verify with listar
+  var toSend = pend.slice();
+  var sent = 0;
+  function sendNext() {
+    if (sent >= toSend.length) {
+      // All sent - now verify against server
+      setTimeout(verificarSync, 2000);
+      return;
     }
+    apiNoCors(toSend[sent], function(err,res){
+      sent++;
+      sendNext();
+    });
+  }
+  sendNext();
+}
+
+function verificarSync() {
+  // Ask server what it has, cross-check with pend[]
+  apiJsonp({action:'listar', nom:usuario, rol:'observador'}, function(err, res){
+    _syncing = false;
+    if (!err && res && res.ok && res.tarjetas) {
+      var serverIds = res.tarjetas.map(function(t){ return t['ID']||t.id||''; });
+      var stillPend = pend.filter(function(p){
+        return serverIds.indexOf(p.id) < 0;
+      });
+      if (stillPend.length < pend.length) {
+        pend = stillPend;
+        try { localStorage.setItem('sso_pend', JSON.stringify(pend)); } catch(e) {}
+        if (pend.length === 0) {
+          showToast('Tarjetas sincronizadas');
+          hideRetryBtn();
+        }
+      }
+    }
+    updSt();
   });
 }
 
