@@ -168,18 +168,29 @@ document.getElementById('t1').onclick = function(){ gTab(1); };
 document.getElementById('t2').onclick = function(){ gTab(2); };
 document.getElementById('t3').onclick = function(){ gTab(3); };
 
-function api(params, cb) {
-  var nm = '_cb'+(++_ci);
-  var url = SURL+'?callback='+nm;
-  for (var k in params) url += '&'+encodeURIComponent(k)+'='+encodeURIComponent(params[k]);
-  var sc = document.createElement('script'), done=false;
-  var tm = setTimeout(function(){ if(!done){done=true;del(nm,sc);cb(new Error('timeout'),null);} },15000);
-  window[nm] = function(d){ if(!done){done=true;clearTimeout(tm);del(nm,sc);cb(null,d);} };
-  sc.onerror = function(){ if(!done){done=true;clearTimeout(tm);del(nm,sc);cb(new Error('err'),null);} };
-  sc.src = url;
-  document.head.appendChild(sc);
+function buildUrl(p) {
+  var url=SURL+'?', parts=[];
+  for(var k in p) parts.push(encodeURIComponent(k)+'='+encodeURIComponent(p[k]));
+  return url+parts.join('&');
 }
-function del(n,el){ delete window[n]; if(el&&el.parentNode) el.parentNode.removeChild(el); }
+function api(params, cb) {
+  // fetch() works on iOS Safari from https:// - GAS returns CORS headers
+  if (typeof fetch !== 'undefined') {
+    fetch(buildUrl(params))
+      .then(function(r){ return r.json(); })
+      .then(function(d){ cb(null,d); })
+      .catch(function(){ apiJsonp(params,cb); });
+  } else { apiJsonp(params,cb); }
+}
+function apiJsonp(params, cb) {
+  var nm='_cb'+(++_ci), url=buildUrl(params)+'&callback='+nm, done=false;
+  var sc=document.createElement('script');
+  var tm=setTimeout(function(){ if(!done){done=true;del(nm,sc);cb(new Error('timeout'),null);}},12000);
+  window[nm]=function(d){ if(!done){done=true;clearTimeout(tm);del(nm,sc);cb(null,d);} };
+  sc.onerror=function(){ if(!done){done=true;clearTimeout(tm);del(nm,sc);cb(new Error('err'),null);} };
+  sc.src=url; document.head.appendChild(sc);
+}
+function del(n,el){ delete window[n]; if(el&&el.parentNode)el.parentNode.removeChild(el); }
 
 function cargar() {
   document.getElementById('c0').innerHTML = '<div class="loading">Cargando tarjetas...</div>';
@@ -446,6 +457,14 @@ function rConfig(){
 })();
 
 function showToast(msg){var t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');clearTimeout(t._t);t._t=setTimeout(function(){t.classList.remove('show');},2800);}
+</script>
+
+<script>
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/app/sw.js')
+    .then(function(){ console.log('SW registered'); })
+    .catch(function(e){ console.log('SW failed:', e); });
+}
 </script>
 </body>
 </html>
