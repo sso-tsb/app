@@ -206,6 +206,11 @@ textarea{min-height:80px;resize:vertical}
 </div>
 
 <div class="toast" id="toast"></div>
+<div id="reenv-fixed" style="display:none;position:fixed;bottom:70px;left:0;right:0;padding:0 16px;z-index:200">
+  <button id="reenv-fixed-btn" style="width:100%;padding:14px;background:#f57c00;color:#fff;border:none;border-radius:12px;font-size:14px;font-weight:700;font-family:inherit;box-shadow:0 4px 16px rgba(245,124,0,.5);-webkit-appearance:none">
+    &#8593; Reenviar tarjetas no enviadas
+  </button>
+</div>
 
 <script>
 var _ad = JSON.parse(document.getElementById('app-data').textContent);
@@ -255,6 +260,10 @@ document.getElementById('inp-nom').onkeydown = function(e){ if(e.key==='Enter') 
 // Wire retry button
 var _rb = document.getElementById('retry-btn');
 if(_rb) _rb.onclick = function(){ syncPend(); };
+
+// Wire fixed reenviar button
+var _rfb = document.getElementById('reenv-fixed-btn');
+if(_rfb) _rfb.addEventListener('click', function(){ doReenviar(); });
 
 function doLogin() {
   var n = document.getElementById('inp-nom').value.trim();
@@ -582,9 +591,21 @@ function rHist(){
     var localHist2=[];
     try{localHist2=JSON.parse(localStorage.getItem('sso_hist_'+usuario))||[];}catch(e){}
     var notSynced=localHist2.filter(function(o){ return serverIds.indexOf('OBS-'+o.num)<0; });
-    var reenviarBtn = notSynced.length>0
-      ? '<button id="btn-reenv" style="width:100%;padding:11px;background:#f57c00;color:#fff;border:none;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;margin-bottom:10px;display:block">Reenviar '+notSynced.length+' tarjeta'+(notSynced.length>1?'s':'')+' no sincronizada'+(notSynced.length>1?'s':'')+'</button>'
-      : (pendCount>0 ? '<button id="btn-reenv" style="width:100%;padding:11px;background:#f57c00;color:#fff;border:none;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;margin-bottom:10px;display:block">Enviar ahora ('+pendCount+' pendiente'+(pendCount>1?'s':'')+')</button>' : '');
+    // Store serverIds globally for reenviar function
+    window._ssoServerIds = tjs.map(function(t){ return t['ID']||t.id||''; });
+    // Show fixed reenviar button if there are unsynced items
+    var fixedBtn = document.getElementById('reenv-fixed');
+    if(fixedBtn){
+      var hasUnsynced = notSynced.length>0 || pendCount>0;
+      fixedBtn.style.display = hasUnsynced ? 'block' : 'none';
+      var fixedBtnTxt = document.getElementById('reenv-fixed-btn');
+      if(fixedBtnTxt){
+        fixedBtnTxt.textContent = notSynced.length>0
+          ? 'Reenviar '+notSynced.length+' tarjeta'+(notSynced.length>1?'s':'')+' no enviada'+(notSynced.length>1?'s':'')
+          : 'Enviar '+pendCount+' pendiente'+(pendCount>1?'s':'');
+      }
+    }
+    var reenviarBtn = '';
     c.innerHTML=reenviarBtn+'<div class="olist">'+tjs.map(function(o){
       var tipo=o.Tipo?mapT(o.Tipo):(o.tipo||'acto');
       var est=o.Estado||o.estado||'Abierta';
@@ -597,14 +618,18 @@ function rHist(){
     }).join('')+'</div>';
   });
   // Wire reenviar button
-  var rb=document.getElementById('btn-reenv');
-  if(rb) rb.onclick=function(){
-    var sIds=tjs.map(function(t){ return t['ID']||t.id||''; });
-    reenviarDesdeHistorial(sIds);
-  };
+  // Button uses inline onclick with global functions - no wiring needed
 }
 
 function mapT(t){ if(!t)return 'acto'; if(t.indexOf('Acto')>=0)return 'acto'; if(t.indexOf('Condici')>=0||t.indexOf('condici')>=0)return 'cond'; if(t.indexOf('Recono')>=0)return 'pos'; if(t.indexOf('Cuasi')>=0)return 'cuasi'; return 'acto'; }
+
+// Global function called from inline onclick - works on iOS Safari
+function doReenviar() {
+  var sIds = window._ssoServerIds || [];
+  var fb = document.getElementById('reenv-fixed');
+  if(fb) fb.style.display = 'none';
+  reenviarDesdeHistorial(sIds);
+}
 
 // Rebuild pend[] from local history for tarjetas not confirmed by server
 function reenviarDesdeHistorial(serverIds) {
