@@ -176,11 +176,26 @@ function buildUrl(p) {
 
 // Image beacon - works on ALL browsers including iOS Safari (no CORS/ITP issues)
 function apiBeacon(params, cb) {
-  var img=new Image(), url=buildUrl(params), done=false;
-  var tm=setTimeout(function(){ if(!done){done=true;cb(null,{ok:true});} },5000);
-  img.onload=function(){ if(!done){done=true;clearTimeout(tm);cb(null,{ok:true});} };
-  img.onerror=function(){ if(!done){done=true;clearTimeout(tm);cb(null,{ok:true});} };
-  img.src=url;
+  var url = buildUrl(params);
+  try {
+    var xhr = new XMLHttpRequest();
+    xhr.open('GET', url, true);
+    xhr.timeout = 10000;
+    xhr.onreadystatechange = function() {
+      if (xhr.readyState === 4) { cb(null, {ok:true}); }
+    };
+    xhr.ontimeout = function() { cb(null, {ok:true}); };
+    xhr.onerror = function() {
+      var img = new Image();
+      img.onload = img.onerror = function(){ cb(null, {ok:true}); };
+      img.src = url;
+    };
+    xhr.send();
+  } catch(e) {
+    var img2 = new Image();
+    img2.onload = img2.onerror = function(){ cb(null, {ok:true}); };
+    img2.src = url;
+  }
 }
 
 // JSONP - for reads that need response (listar, verificarPin)
