@@ -564,6 +564,9 @@ function gTab(t){
 function rHist(){
   var c=document.getElementById('hist-c');
   c.innerHTML='<div class="loading">Cargando...</div>';
+  // Show requeue button if there are local tarjetas not confirmed by server
+  var localHist=[];
+  try{localHist=JSON.parse(localStorage.getItem('sso_hist_'+usuario))||[];}catch(e){}
   api({action:'listar',nom:usuario,rol:'observador'}, function(err,res){
     var tjs=[];
     if(!err && res && res.ok && res.tarjetas && res.tarjetas.length){
@@ -572,7 +575,17 @@ function rHist(){
       try { tjs=JSON.parse(localStorage.getItem('sso_hist_'+usuario))||[]; } catch(e) {}
     }
     if(!tjs.length){ c.innerHTML='<div class="empty"><div class="eico">&#128203;</div><p>Aun no tenes tarjetas registradas.</p></div>'; return; }
-    c.innerHTML='<div class="olist">'+tjs.map(function(o){
+    // Show reenviar button at top
+    var pendCount = pend.length;
+    // Always show reenviar button - it will check against server list
+    var serverIds = tjs.map(function(t){ return t['ID']||t.id||''; });
+    var localHist2=[];
+    try{localHist2=JSON.parse(localStorage.getItem('sso_hist_'+usuario))||[];}catch(e){}
+    var notSynced=localHist2.filter(function(o){ return serverIds.indexOf('OBS-'+o.num)<0; });
+    var reenviarBtn = notSynced.length>0
+      ? '<button id="btn-reenv" style="width:100%;padding:11px;background:#f57c00;color:#fff;border:none;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;margin-bottom:10px;display:block">Reenviar '+notSynced.length+' tarjeta'+(notSynced.length>1?'s':'')+' no sincronizada'+(notSynced.length>1?'s':'')+'</button>'
+      : (pendCount>0 ? '<button id="btn-reenv" style="width:100%;padding:11px;background:#f57c00;color:#fff;border:none;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;margin-bottom:10px;display:block">Enviar ahora ('+pendCount+' pendiente'+(pendCount>1?'s':'')+')</button>' : '');
+    c.innerHTML=reenviarBtn+'<div class="olist">'+tjs.map(function(o){
       var tipo=o.Tipo?mapT(o.Tipo):(o.tipo||'acto');
       var est=o.Estado||o.estado||'Abierta';
       var num=o.Numero||o.num||'';
@@ -583,9 +596,41 @@ function rHist(){
       return '<div class="oitem"><div class="oh"><span class="bdg b-num">#'+String(num).padStart(4,'0')+'</span><span class="bdg '+TIPOB[tipo]+'">'+TIPOS[tipo]+'</span><span class="ebdg '+ec+'">'+est+'</span></div><div class="odesc">'+obs+'</div><div class="ometa">'+uo+' - '+fd(fecha)+'</div></div>';
     }).join('')+'</div>';
   });
+  // Wire reenviar button
+  var rb=document.getElementById('btn-reenv');
+  if(rb) rb.onclick=function(){
+    var sIds=tjs.map(function(t){ return t['ID']||t.id||''; });
+    reenviarDesdeHistorial(sIds);
+  };
 }
 
 function mapT(t){ if(!t)return 'acto'; if(t.indexOf('Acto')>=0)return 'acto'; if(t.indexOf('Condici')>=0||t.indexOf('condici')>=0)return 'cond'; if(t.indexOf('Recono')>=0)return 'pos'; if(t.indexOf('Cuasi')>=0)return 'cuasi'; return 'acto'; }
+
+// Rebuild pend[] from local history for tarjetas not confirmed by server
+function reenviarDesdeHistorial(serverIds) {
+  var hist=[];
+  try{hist=JSON.parse(localStorage.getItem('sso_hist_'+usuario))||[];}catch(e){}
+  if(!hist.length){ showToast('No hay tarjetas en historial local'); return; }
+  var pendingAgain=[];
+  hist.forEach(function(o){
+    var id='OBS-'+o.num;
+    // If not confirmed by server, re-queue
+    if(serverIds.indexOf(id)<0 && o.num){
+      var p={action:'guardar',id:id,num:o.num,fecha:o.fecha||new Date().toISOString(),
+             tipo:o.tipo||'acto',sc:'',nom:usuario,uo:o.uo||'',cli:'',area:'',srv:'',
+             reg:'',obs:o.obs||'',acc:'',mej:'',lat:'',lng:''};
+      // Check not already in pend
+      var alreadyPend=pend.some(function(x){return x.id===id;});
+      if(!alreadyPend) pendingAgain.push(p);
+    }
+  });
+  if(!pendingAgain.length){ showToast('Todas las tarjetas ya estan sincronizadas'); return; }
+  pend = pend.concat(pendingAgain);
+  try{localStorage.setItem('sso_pend',JSON.stringify(pend));}catch(e){}
+  updSt();
+  showToast('Re-encoladas '+pendingAgain.length+' tarjetas. Enviando...');
+  syncPend();
+}
 function fd(iso){ if(!iso) return ''; try{ var d=new Date(iso); return d.toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'2-digit'}); }catch(e){return '';} }
 function showToast(msg){ var t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(t._t); t._t=setTimeout(function(){ t.classList.remove('show'); },3000); }
 </script>
