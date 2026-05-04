@@ -130,11 +130,8 @@ textarea{min-height:80px;resize:vertical}
     </div>
   </div>
   <div id="retry-bar" style="background:#f57c00;color:#fff;padding:9px 14px;display:none;align-items:center;justify-content:space-between;font-size:12px;font-weight:700;gap:8px;position:sticky;top:58px;z-index:98">
-    <span id="retry-msg">Hay tarjetas pendientes de envio</span>
-    <div style="display:flex;gap:6px;flex-shrink:0">
-      <button id="retry-btn" style="background:#fff;color:#f57c00;border:none;border-radius:6px;padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;-webkit-appearance:none">Enviar</button>
-      <button id="clear-btn" style="background:transparent;color:#fff;border:1px solid rgba(255,255,255,.5);border-radius:6px;padding:6px 10px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;-webkit-appearance:none" title="Limpiar si ya fueron enviadas">&#10005;</button>
-    </div>
+    <span>Hay tarjetas pendientes de envio</span>
+    <button id="retry-btn" style="background:#fff;color:#f57c00;border:none;border-radius:6px;padding:6px 14px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;-webkit-appearance:none;flex-shrink:0">Enviar ahora</button>
   </div>
   <div class="tabs">
     <button class="tab act" id="tab-n">+ Nueva</button>
@@ -209,11 +206,6 @@ textarea{min-height:80px;resize:vertical}
 </div>
 
 <div class="toast" id="toast"></div>
-<div id="reenv-fixed" style="display:none;position:fixed;bottom:70px;left:0;right:0;padding:0 16px;z-index:200">
-  <button id="reenv-fixed-btn" style="width:100%;padding:14px;background:#f57c00;color:#fff;border:none;border-radius:12px;font-size:14px;font-weight:700;font-family:inherit;box-shadow:0 4px 16px rgba(245,124,0,.5);-webkit-appearance:none">
-    &#8593; Reenviar tarjetas no enviadas
-  </button>
-</div>
 
 <script>
 var _ad = JSON.parse(document.getElementById('app-data').textContent);
@@ -263,19 +255,6 @@ document.getElementById('inp-nom').onkeydown = function(e){ if(e.key==='Enter') 
 // Wire retry button
 var _rb = document.getElementById('retry-btn');
 if(_rb) _rb.onclick = function(){ syncPend(); };
-
-// Wire clear stale button (X button)
-var _cb = document.getElementById('clear-btn');
-if(_cb) _cb.addEventListener('click', function(){
-  pend = [];
-  try{localStorage.setItem('sso_pend','[]');}catch(e){}
-  updSt();
-  showToast('Cola limpiada');
-});
-
-// Wire fixed reenviar button
-var _rfb = document.getElementById('reenv-fixed-btn');
-if(_rfb) _rfb.addEventListener('click', function(){ doReenviar(); });
 
 function doLogin() {
   var n = document.getElementById('inp-nom').value.trim();
@@ -366,10 +345,38 @@ function apiJsonp(params, cb) {
   document.head.appendChild(sc);
 }
 
+// Form submit via hidden iframe - works on ALL browsers, never blocked by iOS ITP
+function apiForm(params, cb) {
+  try {
+    var ifr = document.createElement('iframe');
+    ifr.name = '_sso_' + Date.now();
+    ifr.style.display = 'none';
+    document.body.appendChild(ifr);
+    var frm = document.createElement('form');
+    frm.method = 'GET';
+    frm.action = SURL;
+    frm.target = ifr.name;
+    frm.style.display = 'none';
+    for (var k in params) {
+      var inp = document.createElement('input');
+      inp.type = 'hidden'; inp.name = k; inp.value = params[k];
+      frm.appendChild(inp);
+    }
+    document.body.appendChild(frm);
+    frm.submit();
+    setTimeout(function(){
+      try{ document.body.removeChild(frm); document.body.removeChild(ifr); }catch(e){}
+      cb(null, {ok:true});
+    }, 3000);
+  } catch(e) { cb(e, null); }
+}
+
 function api(params, cb) {
-  // Use JSONP for all operations - confirmed working on https://sso-tsb.github.io
-  // JSONP gets server confirmation before clearing from pending queue
-  apiJsonp(params, cb);
+  if (params.action === 'guardar') {
+    apiForm(params, cb);
+  } else {
+    apiJsonp(params, cb);
+  }
 }
 function del(n,el){ delete window[n]; if(el&&el.parentNode) el.parentNode.removeChild(el); }
 
@@ -585,9 +592,6 @@ function gTab(t){
 function rHist(){
   var c=document.getElementById('hist-c');
   c.innerHTML='<div class="loading">Cargando...</div>';
-  // Show requeue button if there are local tarjetas not confirmed by server
-  var localHist=[];
-  try{localHist=JSON.parse(localStorage.getItem('sso_hist_'+usuario))||[];}catch(e){}
   api({action:'listar',nom:usuario,rol:'observador'}, function(err,res){
     var tjs=[];
     if(!err && res && res.ok && res.tarjetas && res.tarjetas.length){
@@ -596,29 +600,7 @@ function rHist(){
       try { tjs=JSON.parse(localStorage.getItem('sso_hist_'+usuario))||[]; } catch(e) {}
     }
     if(!tjs.length){ c.innerHTML='<div class="empty"><div class="eico">&#128203;</div><p>Aun no tenes tarjetas registradas.</p></div>'; return; }
-    // Show reenviar button at top
-    var pendCount = pend.length;
-    // Always show reenviar button - it will check against server list
-    var serverIds = tjs.map(function(t){ return t['ID']||t.id||''; });
-    var localHist2=[];
-    try{localHist2=JSON.parse(localStorage.getItem('sso_hist_'+usuario))||[];}catch(e){}
-    var notSynced=localHist2.filter(function(o){ return serverIds.indexOf('OBS-'+o.num)<0; });
-    // Store serverIds globally for reenviar function
-    window._ssoServerIds = tjs.map(function(t){ return t['ID']||t.id||''; });
-    // Show fixed reenviar button if there are unsynced items
-    var fixedBtn = document.getElementById('reenv-fixed');
-    if(fixedBtn){
-      var hasUnsynced = notSynced.length>0 || pendCount>0;
-      fixedBtn.style.display = hasUnsynced ? 'block' : 'none';
-      var fixedBtnTxt = document.getElementById('reenv-fixed-btn');
-      if(fixedBtnTxt){
-        fixedBtnTxt.textContent = notSynced.length>0
-          ? 'Reenviar '+notSynced.length+' tarjeta'+(notSynced.length>1?'s':'')+' no enviada'+(notSynced.length>1?'s':'')
-          : 'Enviar '+pendCount+' pendiente'+(pendCount>1?'s':'');
-      }
-    }
-    var reenviarBtn = '';
-    c.innerHTML=reenviarBtn+'<div class="olist">'+tjs.map(function(o){
+    c.innerHTML='<div class="olist">'+tjs.map(function(o){
       var tipo=o.Tipo?mapT(o.Tipo):(o.tipo||'acto');
       var est=o.Estado||o.estado||'Abierta';
       var num=o.Numero||o.num||'';
@@ -629,57 +611,9 @@ function rHist(){
       return '<div class="oitem"><div class="oh"><span class="bdg b-num">#'+String(num).padStart(4,'0')+'</span><span class="bdg '+TIPOB[tipo]+'">'+TIPOS[tipo]+'</span><span class="ebdg '+ec+'">'+est+'</span></div><div class="odesc">'+obs+'</div><div class="ometa">'+uo+' - '+fd(fecha)+'</div></div>';
     }).join('')+'</div>';
   });
-  // Wire reenviar button
-  // Button uses inline onclick with global functions - no wiring needed
 }
 
 function mapT(t){ if(!t)return 'acto'; if(t.indexOf('Acto')>=0)return 'acto'; if(t.indexOf('Condici')>=0||t.indexOf('condici')>=0)return 'cond'; if(t.indexOf('Recono')>=0)return 'pos'; if(t.indexOf('Cuasi')>=0)return 'cuasi'; return 'acto'; }
-
-// Global function called from inline onclick - works on iOS Safari
-function doReenviar() {
-  var sIds = window._ssoServerIds || [];
-  var fb = document.getElementById('reenv-fixed');
-  if(fb) fb.style.display = 'none';
-  reenviarDesdeHistorial(sIds);
-}
-
-// Rebuild pend[] from local history for tarjetas not confirmed by server
-function reenviarDesdeHistorial(serverIds) {
-  var hist=[];
-  try{hist=JSON.parse(localStorage.getItem('sso_hist_'+usuario))||[];}catch(e){}
-  if(!hist.length){ showToast('No hay tarjetas en historial local'); return; }
-  var pendingAgain=[];
-  hist.forEach(function(o){
-    var id='OBS-'+o.num;
-    // If not confirmed by server, re-queue
-    if(serverIds.indexOf(id)<0 && o.num){
-      var p={action:'guardar',id:id,num:o.num,fecha:o.fecha||new Date().toISOString(),
-             tipo:o.tipo||'acto',sc:'',nom:usuario,uo:o.uo||'',cli:'',area:'',srv:'',
-             reg:'',obs:o.obs||'',acc:'',mej:'',lat:'',lng:''};
-      // Check not already in pend
-      var alreadyPend=pend.some(function(x){return x.id===id;});
-      if(!alreadyPend) pendingAgain.push(p);
-    }
-  });
-  if(!pendingAgain.length){
-    // All tarjetas confirmed on server - clear any stale pending items
-    pend = [];
-    try{localStorage.setItem('sso_pend',JSON.stringify(pend));}catch(e){}
-    updSt();
-    // Also hide the retry bar and fixed button
-    var rb=document.getElementById('retry-bar');
-    if(rb) rb.style.display='none';
-    var fb=document.getElementById('reenv-fixed');
-    if(fb) fb.style.display='none';
-    showToast('Todo sincronizado correctamente');
-    return;
-  }
-  pend = pend.concat(pendingAgain);
-  try{localStorage.setItem('sso_pend',JSON.stringify(pend));}catch(e){}
-  updSt();
-  showToast('Re-encoladas '+pendingAgain.length+' tarjetas. Enviando...');
-  syncPend();
-}
 function fd(iso){ if(!iso) return ''; try{ var d=new Date(iso); return d.toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'2-digit'}); }catch(e){return '';} }
 function showToast(msg){ var t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(t._t); t._t=setTimeout(function(){ t.classList.remove('show'); },3000); }
 </script>
