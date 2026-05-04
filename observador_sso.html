@@ -304,19 +304,27 @@ function buildUrl(params) {
 // Fire and forget: saves data without needing to read response
 function apiBeacon(params, cb) {
   var url = buildUrl(params);
-  var img = new Image();
-  var done = false;
-  var tm = setTimeout(function(){
-    if (!done) { done=true; cb(null, {ok:true}); } // assume ok after timeout
-  }, 5000);
-  img.onload = function(){
-    if (!done) { done=true; clearTimeout(tm); cb(null, {ok:true}); }
-  };
-  img.onerror = function(){
-    // onerror fires even on redirect - still means request was made
-    if (!done) { done=true; clearTimeout(tm); cb(null, {ok:true}); }
-  };
-  img.src = url;
+  // Use XHR - works cross-origin on iOS Safari (GAS is not a tracking domain)
+  try {
+    var xhr = new XMLHttpRequest();
+    xhr.open('GET', url, true);
+    xhr.timeout = 10000;
+    xhr.onreadystatechange = function() {
+      if (xhr.readyState === 4) { cb(null, {ok:true}); }
+    };
+    xhr.ontimeout = function() { cb(null, {ok:true}); };
+    xhr.onerror = function() {
+      // XHR failed - fallback to Image beacon
+      var img = new Image();
+      img.onload = img.onerror = function(){ cb(null, {ok:true}); };
+      img.src = url;
+    };
+    xhr.send();
+  } catch(e) {
+    var img2 = new Image();
+    img2.onload = img2.onerror = function(){ cb(null, {ok:true}); };
+    img2.src = url;
+  }
 }
 
 // JSONP - for reads that need response
@@ -574,9 +582,7 @@ function rHist(){
       var uo=o['Unidad Operativa']||o.uo||'';
       var fecha=o.Fecha||o.fecha||'';
       var ec=est==='Abierta'?'ebA':est==='En tratamiento'?'ebT':est==='Cerrada'?'ebC':'ebV';
-      var comLider=o['Comentario L\u00edder']||o['Comentario Lider']||'';
-      var comHtml=comLider?'<div style="background:#e8eef8;border-left:3px solid #1a3a8a;border-radius:0 6px 6px 0;padding:6px 9px;font-size:11px;color:#1a3a8a;margin-top:5px"><b>Lider:</b> '+comLider+'</div>':'';
-      return '<div class="oitem"><div class="oh"><span class="bdg b-num">#'+String(num).padStart(4,'0')+'</span><span class="bdg '+TIPOB[tipo]+'">'+TIPOS[tipo]+'</span><span class="ebdg '+ec+'">'+est+'</span></div><div class="odesc">'+obs+'</div><div class="ometa">'+uo+' - '+fd(fecha)+'</div>'+comHtml+'</div>';
+      return '<div class="oitem"><div class="oh"><span class="bdg b-num">#'+String(num).padStart(4,'0')+'</span><span class="bdg '+TIPOB[tipo]+'">'+TIPOS[tipo]+'</span><span class="ebdg '+ec+'">'+est+'</span></div><div class="odesc">'+obs+'</div><div class="ometa">'+uo+' - '+fd(fecha)+'</div></div>';
     }).join('')+'</div>';
   });
 }
@@ -584,14 +590,6 @@ function rHist(){
 function mapT(t){ if(!t)return 'acto'; if(t.indexOf('Acto')>=0)return 'acto'; if(t.indexOf('Condici')>=0||t.indexOf('condici')>=0)return 'cond'; if(t.indexOf('Recono')>=0)return 'pos'; if(t.indexOf('Cuasi')>=0)return 'cuasi'; return 'acto'; }
 function fd(iso){ if(!iso) return ''; try{ var d=new Date(iso); return d.toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'2-digit'}); }catch(e){return '';} }
 function showToast(msg){ var t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(t._t); t._t=setTimeout(function(){ t.classList.remove('show'); },3000); }
-</script>
-
-<script>
-if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('/app/sw.js')
-    .then(function(){ console.log('SW registered'); })
-    .catch(function(e){ console.log('SW failed:', e); });
-}
 </script>
 </body>
 </html>
