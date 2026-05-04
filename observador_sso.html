@@ -345,26 +345,39 @@ function apiJsonp(params, cb) {
   document.head.appendChild(sc);
 }
 
-// Send via fetch no-cors (works on ALL browsers/webviews including WKWebView)
-// Does NOT read response - used for fire-and-forget sends
-function apiNoCors(params, cb) {
-  var url = buildUrl(params);
-  if (typeof fetch !== 'undefined') {
-    fetch(url, {method:'GET', mode:'no-cors', cache:'no-cache'})
-      .then(function(){ cb(null, {ok:true, sent:true}); })
-      .catch(function(){ cb(new Error('fetch-failed'), null); });
-  } else {
-    // Fallback: XHR
-    try {
-      var xhr = new XMLHttpRequest();
-      xhr.open('GET', url, true);
-      xhr.onreadystatechange = function(){
-        if(xhr.readyState===4) cb(null, {ok:true, sent:true});
-      };
-      xhr.onerror = function(){ cb(new Error('xhr-failed'), null); };
-      xhr.send();
-    } catch(e){ cb(e, null); }
+// iframe+postMessage: works on ALL browsers including iOS Safari ITP
+// Server returns HTML with parent.postMessage(result) - no CORS issues
+function apiIframe(params, cb) {
+  var url = buildUrl(params); // no callback param = server returns HTML+postMessage
+  var ifr = document.createElement('iframe');
+  ifr.style.cssText = 'position:absolute;width:1px;height:1px;opacity:0;pointer-events:none;border:none;top:-9999px';
+  var done = false;
+  var tm = setTimeout(function(){
+    if (!done) {
+      done = true;
+      cleanup();
+      cb(new Error('timeout'), null);
+    }
+  }, 15000);
+  function cleanup() {
+    window.removeEventListener('message', onMsg);
+    try { document.body.removeChild(ifr); } catch(e) {}
+    clearTimeout(tm);
   }
+  function onMsg(e) {
+    if (done) return;
+    try {
+      var data = typeof e.data === 'string' ? JSON.parse(e.data) : e.data;
+      if (data && data.hasOwnProperty('ok')) {
+        done = true;
+        cleanup();
+        cb(null, data);
+      }
+    } catch(ex) {}
+  }
+  window.addEventListener('message', onMsg);
+  document.body.appendChild(ifr);
+  ifr.src = url;
 }
 
 // JSONP - for reads (listar) when we need the response
@@ -387,7 +400,7 @@ function apiJsonp(params, cb) {
 
 function api(params, cb) {
   if (params.action === 'guardar') {
-    apiNoCors(params, cb);
+    apiIframe(params, cb);
   } else {
     apiJsonp(params, cb);
   }
@@ -417,10 +430,15 @@ function syncPend() {
   function sendNext() {
     if (sent >= toSend.length) {
       // All sent - now verify against server
-      setTimeout(verificarSync, 2000);
+      setTimeout(verificarSync, 3000);
       return;
     }
-    apiNoCors(toSend[sent], function(err,res){
+    api(toSend[sent], function(err,res){
+      if (!err && res && res.ok) {
+        // Confirmed saved - remove from pend
+        pend = pend.filter(function(p){ return p.id !== toSend[sent].id; });
+        try { localStorage.setItem('sso_pend',JSON.stringify(pend)); } catch(e) {}
+      }
       sent++;
       sendNext();
     });
