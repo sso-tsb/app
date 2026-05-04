@@ -424,22 +424,30 @@ function syncPend() {
   if (_syncing) return;
   _syncing = true;
   updSt();
-  // Send all pending with no-cors, then verify with listar
   var toSend = pend.slice();
-  var sent = 0;
+  var idx = 0;
   function sendNext() {
-    if (sent >= toSend.length) {
-      // All sent - now verify against server
-      setTimeout(verificarSync, 3000);
+    if (idx >= toSend.length) {
+      _syncing = false;
+      updSt();
       return;
     }
-    api(toSend[sent], function(err,res){
+    var item = toSend[idx]; // capture current item
+    var currentIdx = idx;
+    idx++;
+    api(item, function(err, res) {
       if (!err && res && res.ok) {
-        // Confirmed saved - remove from pend
-        pend = pend.filter(function(p){ return p.id !== toSend[sent].id; });
-        try { localStorage.setItem('sso_pend',JSON.stringify(pend)); } catch(e) {}
+        // Server confirmed - remove from pend
+        pend = pend.filter(function(p){ return p.id !== item.id; });
+        try { localStorage.setItem('sso_pend', JSON.stringify(pend)); } catch(e) {}
+        updSt();
+        if (pend.length === 0) {
+          showToast('Todo enviado al servidor');
+          hideRetryBtn();
+          _syncing = false;
+          return;
+        }
       }
-      sent++;
       sendNext();
     });
   }
