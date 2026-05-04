@@ -130,8 +130,11 @@ textarea{min-height:80px;resize:vertical}
     </div>
   </div>
   <div id="retry-bar" style="background:#f57c00;color:#fff;padding:9px 14px;display:none;align-items:center;justify-content:space-between;font-size:12px;font-weight:700;gap:8px;position:sticky;top:58px;z-index:98">
-    <span>Hay tarjetas pendientes de envio</span>
-    <button id="retry-btn" style="background:#fff;color:#f57c00;border:none;border-radius:6px;padding:6px 14px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;-webkit-appearance:none;flex-shrink:0">Enviar ahora</button>
+    <span id="retry-msg">Hay tarjetas pendientes de envio</span>
+    <div style="display:flex;gap:6px;flex-shrink:0">
+      <button id="retry-btn" style="background:#fff;color:#f57c00;border:none;border-radius:6px;padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;-webkit-appearance:none">Enviar</button>
+      <button id="clear-btn" style="background:transparent;color:#fff;border:1px solid rgba(255,255,255,.5);border-radius:6px;padding:6px 10px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;-webkit-appearance:none" title="Limpiar si ya fueron enviadas">&#10005;</button>
+    </div>
   </div>
   <div class="tabs">
     <button class="tab act" id="tab-n">+ Nueva</button>
@@ -260,6 +263,15 @@ document.getElementById('inp-nom').onkeydown = function(e){ if(e.key==='Enter') 
 // Wire retry button
 var _rb = document.getElementById('retry-btn');
 if(_rb) _rb.onclick = function(){ syncPend(); };
+
+// Wire clear stale button (X button)
+var _cb = document.getElementById('clear-btn');
+if(_cb) _cb.addEventListener('click', function(){
+  pend = [];
+  try{localStorage.setItem('sso_pend','[]');}catch(e){}
+  updSt();
+  showToast('Cola limpiada');
+});
 
 // Wire fixed reenviar button
 var _rfb = document.getElementById('reenv-fixed-btn');
@@ -649,7 +661,19 @@ function reenviarDesdeHistorial(serverIds) {
       if(!alreadyPend) pendingAgain.push(p);
     }
   });
-  if(!pendingAgain.length){ showToast('Todas las tarjetas ya estan sincronizadas'); return; }
+  if(!pendingAgain.length){
+    // All tarjetas confirmed on server - clear any stale pending items
+    pend = [];
+    try{localStorage.setItem('sso_pend',JSON.stringify(pend));}catch(e){}
+    updSt();
+    // Also hide the retry bar and fixed button
+    var rb=document.getElementById('retry-bar');
+    if(rb) rb.style.display='none';
+    var fb=document.getElementById('reenv-fixed');
+    if(fb) fb.style.display='none';
+    showToast('Todo sincronizado correctamente');
+    return;
+  }
   pend = pend.concat(pendingAgain);
   try{localStorage.setItem('sso_pend',JSON.stringify(pend));}catch(e){}
   updSt();
