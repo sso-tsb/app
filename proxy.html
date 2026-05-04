@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"><title>SSO</title></head>
+<body>
+<p id="msg" style="font-family:sans-serif;color:#1a3a8a;text-align:center;margin-top:60px;font-size:16px;font-weight:700">Enviando...</p>
+<script>
+var SURL = 'https://script.google.com/macros/s/AKfycbyywLxrXrIHXN1BNRgz602UiWNKmcs8cTE314B_xGUKFGo2E3wMDifwCgK64Wzdat_R/exec';
+
+var params = {};
+window.location.search.substring(1).split('&').forEach(function(p){
+  var i = p.indexOf('=');
+  if(i>0) params[decodeURIComponent(p.substring(0,i))] = decodeURIComponent(p.substring(i+1).replace(/\+/g,' '));
+});
+delete params._origin;
+
+var url = SURL + '?';
+var parts = [];
+Object.keys(params).forEach(function(k){
+  parts.push(encodeURIComponent(k)+'='+encodeURIComponent(params[k]));
+});
+url += parts.join('&');
+
+function done(ok) {
+  document.getElementById('msg').textContent = ok ? 'Enviado!' : 'Error al enviar';
+  document.getElementById('msg').style.color = ok ? '#388e3c' : '#c62828';
+  try { if(window.opener) window.opener.postMessage({ok:ok}, '*'); } catch(e){}
+  setTimeout(function(){ window.close(); }, 2000);
+}
+
+// Try fetch first (works when user navigated here directly)
+fetch(url)
+  .then(function(r){ return r.text(); })
+  .then(function(t){
+    try {
+      var clean = t.replace(/^[^(]+\(/, '').replace(/\)\s*$/, '');
+      var data = JSON.parse(clean);
+      done(data.ok === true);
+    } catch(e){ done(true); }
+  })
+  .catch(function(){
+    // fetch failed - try JSONP
+    var cb = '_p' + Date.now();
+    window[cb] = function(data){ clearTimeout(ft); done(data.ok===true); };
+    var sc = document.createElement('script');
+    sc.onerror = function(){ clearTimeout(ft); done(false); };
+    sc.src = url + '&callback=' + cb;
+    document.head.appendChild(sc);
+    var ft = setTimeout(function(){ done(false); }, 12000);
+  });
+</script>
+</body>
+</html>
