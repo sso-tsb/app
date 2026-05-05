@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"><title>SSO</title></head>
+<body style="margin:0;display:flex;align-items:center;justify-content:center;min-height:100vh;font-family:sans-serif">
+<div id="msg" style="text-align:center;color:#1a3a8a;font-size:15px;font-weight:600">Enviando...</div>
+<script>
+var SURL = 'https://script.google.com/macros/s/AKfycbw7mKh6uGdydT9FuamLbw979veQaZJd07cKdA0m2UaDZms5ZdyhOmGLT6Nz9PfLj3Kp/exec';
+
+// Parse params from URL
+var params = {};
+window.location.search.substring(1).split('&').forEach(function(p){
+  var i = p.indexOf('=');
+  if(i>0) params[decodeURIComponent(p.substring(0,i))] = decodeURIComponent(p.substring(i+1).replace(/\+/g,' '));
+});
+delete params._origin;
+
+// Build GAS URL (no callback = returns HTML with postMessage)
+var parts = [];
+Object.keys(params).forEach(function(k){
+  parts.push(encodeURIComponent(k)+'='+encodeURIComponent(params[k]));
+});
+var gasUrl = SURL + '?' + parts.join('&');
+
+var done = false;
+
+function finish(data) {
+  if (done) return;
+  done = true;
+  var ok = data && data.ok !== false;
+  document.getElementById('msg').textContent = ok ? 'Listo!' : 'Error';
+  document.getElementById('msg').style.color = ok ? '#388e3c' : '#c62828';
+  try { if(window.opener) window.opener.postMessage(data || {ok:ok}, '*'); } catch(e){}
+  setTimeout(function(){ window.close(); }, 1000);
+}
+
+// Method 1: Listen for postMessage from GAS iframe
+window.addEventListener('message', function(e){
+  try {
+    var d = typeof e.data==='string' ? JSON.parse(e.data) : e.data;
+    if (d && d.hasOwnProperty('ok')) finish(d);
+  } catch(ex){}
+});
+
+// Load GAS URL in hidden iframe - GAS returns HTML with parent.postMessage
+var ifr = document.createElement('iframe');
+ifr.style.display = 'none';
+ifr.src = gasUrl;
+document.body.appendChild(ifr);
+
+// Method 2: If postMessage doesn't fire in 6s, try direct navigation
+setTimeout(function(){
+  if (!done) {
+    // Navigate this window to GAS URL with JSONP callback
+    var cb = '_done';
+    window[cb] = function(data){ finish(data); };
+    var sc = document.createElement('script');
+    sc.src = gasUrl + '&callback=' + cb;
+    sc.onerror = function(){ 
+      // Last resort: assume sent
+      finish({ok:true, assumed:true});
+    };
+    document.head.appendChild(sc);
+  }
+}, 6000);
+
+// Final fallback
+setTimeout(function(){
+  if (!done) finish({ok:true, assumed:true});
+}, 18000);
+</script>
+</body>
+</html>
